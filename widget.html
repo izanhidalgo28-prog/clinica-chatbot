@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Chatbot Demo — Clínica Estética</title>
+  <style>
+    /* ── WIDGET FLOTANTE ── Pega este bloque en la web del cliente */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f0f0f0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+
+    /* Botón flotante */
+    #chat-btn {
+      position: fixed; bottom: 24px; right: 24px; width: 58px; height: 58px;
+      border-radius: 50%; background: #D4537E; border: none; cursor: pointer;
+      box-shadow: 0 4px 16px rgba(212,83,126,0.4); display: flex; align-items: center;
+      justify-content: center; font-size: 24px; transition: transform 0.2s; z-index: 9999;
+    }
+    #chat-btn:hover { transform: scale(1.08); }
+
+    /* Ventana de chat */
+    #chat-window {
+      position: fixed; bottom: 96px; right: 24px; width: 360px;
+      border-radius: 16px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      display: none; flex-direction: column; z-index: 9998; background: #fff;
+      max-height: 520px;
+    }
+    #chat-window.open { display: flex; }
+
+    /* Header */
+    .chat-header {
+      background: #D4537E; padding: 14px 16px; display: flex;
+      align-items: center; gap: 10px;
+    }
+    .chat-avatar { width: 36px; height: 36px; border-radius: 50%; background: #F4C0D1; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+    .chat-header-text { flex: 1; }
+    .chat-name { font-size: 14px; font-weight: 600; color: #fff; }
+    .chat-status { font-size: 11px; color: #F4C0D1; }
+    .close-btn { background: none; border: none; color: #F4C0D1; font-size: 20px; cursor: pointer; line-height: 1; }
+
+    /* Mensajes */
+    .messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; background: #FAFAFA; }
+    .msg { max-width: 82%; padding: 9px 13px; border-radius: 14px; font-size: 13px; line-height: 1.5; }
+    .msg.bot { background: #fff; color: #2C1A22; border: 0.5px solid #F4C0D1; border-bottom-left-radius: 3px; align-self: flex-start; }
+    .msg.user { background: #D4537E; color: #fff; border-bottom-right-radius: 3px; align-self: flex-end; }
+    .msg.typing { color: #999; font-style: italic; }
+
+    /* Accesos rápidos */
+    .quick-wrap { padding: 8px 14px 4px; display: flex; flex-wrap: wrap; gap: 5px; background: #fff; border-top: 0.5px solid #F4C0D1; }
+    .qbtn { font-size: 11px; padding: 4px 10px; border: 0.5px solid #F4C0D1; border-radius: 20px; background: #FBEAF0; color: #993556; cursor: pointer; transition: background 0.15s; }
+    .qbtn:hover { background: #F4C0D1; }
+
+    /* Input */
+    .input-area { display: flex; gap: 8px; padding: 10px 12px; background: #fff; border-top: 0.5px solid #eee; }
+    .input-area input { flex: 1; border: 0.5px solid #ddd; border-radius: 20px; padding: 8px 14px; font-size: 13px; outline: none; }
+    .input-area input:focus { border-color: #D4537E; }
+    .send-btn { width: 36px; height: 36px; border-radius: 50%; background: #D4537E; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .send-btn svg { width: 16px; height: 16px; fill: #fff; }
+
+    /* Demo label */
+    .demo-note { font-size: 9px; color: #ccc; text-align: center; padding: 4px; background: #fff; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════
+     PEGA SOLO ESTO EN LA WEB DEL CLIENTE
+     (desde aquí hasta el final del </script>)
+     ══════════════════════════════════════════════ -->
+
+<!-- Botón flotante -->
+<button id="chat-btn" onclick="toggleChat()" title="Abrir chat">✨</button>
+
+<!-- Ventana de chat -->
+<div id="chat-window">
+  <div class="chat-header">
+    <div class="chat-avatar">✨</div>
+    <div class="chat-header-text">
+      <div class="chat-name">Clínica Belleza & Estética</div>
+      <div class="chat-status">● Asistente disponible</div>
+    </div>
+    <button class="close-btn" onclick="toggleChat()">×</button>
+  </div>
+
+  <div class="messages" id="msgs">
+    <div class="msg bot">¡Hola! 🌸 Soy el asistente virtual de la clínica. Puedo informarte sobre tratamientos, precios y citas. ¿En qué te ayudo?</div>
+  </div>
+
+  <div class="quick-wrap" id="quick-wrap">
+    <button class="qbtn" onclick="sendQuick('¿Qué tratamientos ofrecéis?')">Tratamientos</button>
+    <button class="qbtn" onclick="sendQuick('¿Cuánto cuesta el láser?')">Precios láser</button>
+    <button class="qbtn" onclick="sendQuick('Quiero pedir cita')">Pedir cita</button>
+    <button class="qbtn" onclick="sendQuick('¿Hacéis bótox?')">Bótox</button>
+  </div>
+
+  <div class="input-area">
+    <input type="text" id="userInput" placeholder="Escribe tu pregunta..." onkeydown="if(event.key==='Enter') sendMsg()" />
+    <button class="send-btn" onclick="sendMsg()">
+      <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+    </button>
+  </div>
+  <div class="demo-note">Asistente virtual · IA</div>
+</div>
+
+<script>
+  // ══ CONFIGURACIÓN — editar por cada cliente ══
+  const CONFIG = {
+    // URL de tu servidor en Vercel (la misma para todos los clientes)
+    apiUrl: "https://TU-PROYECTO.vercel.app/api/chat",
+
+    // Información personalizada de esta clínica
+    systemPrompt: `Eres la asistente virtual de Clínica Belleza & Estética, una clínica estética en Madrid.
+Tu tono es cálido, profesional y cercano. Responde siempre en español, de forma breve (máximo 4 frases).
+Si la clienta quiere pedir cita, pídele nombre, tratamiento deseado y horario preferido.
+
+INFORMACIÓN DE LA CLÍNICA:
+- Horario: lunes a viernes 9:30–20:00, sábados 9:30–15:00.
+- Dirección: Calle Serrano 45, Madrid. Metro Serrano.
+- Teléfono: 910 234 567
+
+TRATAMIENTOS Y PRECIOS:
+- Depilación láser diodo: desde 30€/zona. Bono 6 sesiones −20%.
+- Bótox: 1 zona 180€, 2 zonas 280€, 3 zonas 350€. Requiere valoración previa gratuita.
+- Relleno labios (ácido hialurónico): desde 250€.
+- Facial hidratante: 60€. Peeling químico: desde 80€.
+- Mesoterapia facial: 90€/sesión, bono 5 sesiones 380€.
+- HIFU lifting sin cirugía: desde 350€.
+- Masaje relajante 60 min: 55€.
+
+PROMOCIONES:
+- Primera visita con valoración gratuita.
+- Bono primavera: láser piernas completas + axilas por 199€ (antes 280€).
+
+Si no sabes algo con certeza, indica que lo consultarán y llamarán al 910 234 567.`
+  };
+  // ════════════════════════════════════════════
+
+  let chatOpen = false;
+  const history = [];
+
+  function toggleChat() {
+    chatOpen = !chatOpen;
+    document.getElementById("chat-window").classList.toggle("open", chatOpen);
+  }
+
+  function addMsg(text, role) {
+    const msgs = document.getElementById("msgs");
+    const d = document.createElement("div");
+    d.className = "msg " + role;
+    d.textContent = text;
+    msgs.appendChild(d);
+    msgs.scrollTop = msgs.scrollHeight;
+    return d;
+  }
+
+  async function sendMsg() {
+    const input = document.getElementById("userInput");
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    document.getElementById("quick-wrap").style.display = "none";
+
+    addMsg(text, "user");
+    history.push({ role: "user", content: text });
+
+    const loading = addMsg("Escribiendo...", "bot typing");
+
+    try {
+      const res = await fetch(CONFIG.apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: history,
+          systemPrompt: CONFIG.systemPrompt
+        })
+      });
+
+      const data = await res.json();
+      const reply = data.reply || "Lo siento, no pude procesar tu consulta.";
+      loading.className = "msg bot";
+      loading.textContent = reply;
+      history.push({ role: "assistant", content: reply });
+
+    } catch {
+      loading.className = "msg bot";
+      loading.textContent = "Error de conexión. Por favor inténtalo de nuevo.";
+    }
+
+    document.getElementById("msgs").scrollTop = 9999;
+  }
+
+  function sendQuick(text) {
+    document.getElementById("userInput").value = text;
+    sendMsg();
+  }
+</script>
+
+</body>
+</html>
